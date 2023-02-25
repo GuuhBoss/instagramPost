@@ -33,21 +33,6 @@ module.exports = {
 
         console.log('posting picture')
 
-        if (url.slice(url.lastIndexOf('.') + 1) === 'png') {
-          // Read the PNG file and convert it to editable format
-          await Jimp.read(url, function (err, image) {
-            if (err) {
-              // Return if any error
-              console.log('Error converting file', err);
-              return;
-            }
-
-            // Convert image to JPG and store it to
-            url = `./output/image_${Date.now()}.jpg`
-            image.write(url);
-          });
-        }
-
         const { media } = await client.uploadPhoto({ photo: url, caption: 'teste', post: 'feed' })
         console.log(`https://www.instagram.com/p/${media.code}/`)
       };
