@@ -10,7 +10,7 @@ require("dotenv").config();
 
 // Upload new Inky Doodle to Instagram every day at 4:00 PM
 module.exports = {
-  starter: async (url) => {
+  starter: async (url, caption = null) => {
     const instagramLoginFunction = async () => {
       if (fs.existsSync("./cookies.json")) {
         fs.unlinkSync("./cookies.json");
@@ -33,7 +33,7 @@ module.exports = {
 
         console.log('posting picture')
 
-        const { media } = await client.uploadPhoto({ photo: url, caption: 'teste', post: 'feed' })
+        const { media } = await client.uploadPhoto({ photo: url, caption: caption + ' #midjournay #art #ai #picture', post: 'feed' })
         console.log(`https://www.instagram.com/p/${media.code}/`)
       };
 

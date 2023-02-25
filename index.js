@@ -2,6 +2,7 @@ const { Client, GatewayIntentBits } = require("discord.js");
 const instagram = require("./instagram.js");
 const imgur = require("./imgur.js");
 const Jimp = require("jimp");
+const {resize} = require("jimp");
 require("dotenv").config();
 
 const client = new Client({
@@ -20,6 +21,11 @@ client.on("messageCreate",  async (msg) => {
     console.log({
         [msg.author.username]: msg.content
     })
+
+    let caption = msg.content.substring(
+        msg.content.indexOf("*") + 1,
+        msg.content.lastIndexOf("*")
+    );
 
     let url = '';
     if (msg.author.username === 'Midjourney Bot' && msg.attachments.size) {
@@ -45,7 +51,7 @@ client.on("messageCreate",  async (msg) => {
             url = await imgur.newUrl(url);
             console.log(url);
         }
-        instagram.starter(url).then(r => '')
+        instagram.starter(url, caption).then(r => '')
     }
 });
 
