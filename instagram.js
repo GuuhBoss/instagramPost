@@ -1,0 +1,206 @@
+const fs = require("fs");
+const Instagram = require("./instagram-web-api/index");
+const FileCookieStore = require("tough-cookie-filestore2");
+const imaps = require("imap-simple");
+const _ = require("lodash");
+const simpleParser = require("mailparser").simpleParser;
+const Jimp = require("jimp");
+
+require("dotenv").config();
+
+// Upload new Inky Doodle to Instagram every day at 4:00 PM
+module.exports = {
+  starter: async (url) => {
+    const instagramLoginFunction = async () => {
+      if (fs.existsSync("./cookies.json")) {
+        fs.unlinkSync("./cookies.json");
+      }
+      // Persist cookies after Instagram client log in
+      const cookieStore = new FileCookieStore("./cookies.json");
+
+      const client = new Instagram(
+          {
+            username: process.env.INSTAGRAM_USERNAME,
+            password: process.env.INSTAGRAM_PASSWORD,
+            cookieStore,
+          },
+          {
+            language: "en-US",
+          }
+      );
+
+      const instagramPostPictureFunction = async () => {
+
+        console.log('posting picture')
+
+        if (url.slice(url.lastIndexOf('.') + 1) === 'png') {
+          // Read the PNG file and convert it to editable format
+          await Jimp.read(url, function (err, image) {
+            if (err) {
+              // Return if any error
+              console.log('Error converting file', err);
+              return;
+            }
+
+            // Convert image to JPG and store it to
+            url = `./output/image_${Date.now()}.jpg`
+            image.write(url);
+          });
+        }
+
+        const { media } = await client.uploadPhoto({ photo: url, caption: 'teste', post: 'feed' })
+        console.log(`https://www.instagram.com/p/${media.code}/`)
+      };
+
+      try {
+        console.log("Logging in...");
+        await client.login();
+        console.log("Login successful!");
+
+        const delayedInstagramPostFunction = async (timeout) => {
+          setTimeout(async () => {
+            await instagramPostPictureFunction();
+          }, timeout);
+        };
+
+        await delayedInstagramPostFunction(50000);
+      } catch (err) {
+        console.log("Login failed!");
+
+        const delayedLoginFunction = async (timeout) => {
+          setTimeout(async () => {
+            await client.login().then(() => instagramPostPictureFunction());
+          }, timeout);
+        };
+
+        if (err.statusCode === 403 || err.statusCode === 429) {
+          console.log("Throttled!");
+
+          await delayedLoginFunction(60000);
+        }
+
+        console.log(err);
+
+        // Instagram has thrown a checkpoint error
+        if (err.error && err.error.message === "checkpoint_required") {
+          const challengeUrl = err.error.checkpoint_url;
+
+          await client.updateChallenge({ challengeUrl, choice: 1 });
+
+          const emailConfig = {
+            imap: {
+              user: `${process.env.INKY_DOODLE_EMAIL}`,
+              password: `${process.env.INKY_DOODLE_EMAIL_PASSWORD}`,
+              host: "imap.gmail.com",
+              port: 993,
+              tls: true,
+              tlsOptions: {
+                servername: "imap.gmail.com",
+                rejectUnauthorized: false,
+              },
+              authTimeout: 30000,
+            },
+          };
+
+          // Connect to email and solve Instagram challenges after delay
+          const delayedEmailFunction = async (timeout) => {
+            setTimeout(() => {
+              imaps.connect(emailConfig).then(async (connection) => {
+                return connection.openBox("INBOX").then(async () => {
+                  // Fetch emails from the last hour
+                  const delay = 1 * 3600 * 1000;
+                  let lastHour = new Date();
+                  lastHour.setTime(Date.now() - delay);
+                  lastHour = lastHour.toISOString();
+                  const searchCriteria = ["ALL", ["SINCE", lastHour]];
+                  const fetchOptions = {
+                    bodies: [""],
+                  };
+                  return connection
+                      .search(searchCriteria, fetchOptions)
+                      .then((messages) => {
+                        messages.forEach((item) => {
+                          const all = _.find(item.parts, { which: "" });
+                          const id = item.attributes.uid;
+                          const idHeader = "Imap-Id: " + id + "\r\n";
+                          simpleParser(idHeader + all.body, async (err, mail) => {
+                            if (err) {
+                              console.log(err);
+                            }
+
+                            console.log(mail.subject);
+
+                            const answerCodeArr = mail.text
+                                .split("\n")
+                                .filter(
+                                    (item) =>
+                                        item && /^\S+$/.test(item) && !isNaN(Number(item))
+                                );
+
+                            if (mail.text.includes("Instagram")) {
+                              if (answerCodeArr.length > 0) {
+                                // Answer code must be kept as string type and not manipulated to a number type to preserve leading zeros
+                                const answerCode = answerCodeArr[0];
+                                console.log(answerCode);
+
+                                await client.updateChallenge({
+                                  challengeUrl,
+                                  securityCode: answerCode,
+                                });
+
+                                console.log(
+                                    `Answered Instagram security challenge with answer code: ${answerCode}`
+                                );
+
+                                await client.login();
+
+                                await instagramPostPictureFunction();
+                              }
+                            }
+                          });
+                        });
+                      });
+                });
+              });
+            }, timeout);
+          };
+
+          await delayedEmailFunction(40000);
+        }
+
+        // Delete stored cookies, if any, and log in again
+        console.log("Logging in again and setting new cookie store");
+        fs.unlinkSync("./cookies.json");
+        const newCookieStore = new FileCookieStore("./cookies.json");
+
+        const newClient = new Instagram(
+            {
+              username: process.env.INSTAGRAM_USERNAME,
+              password: process.env.INSTAGRAM_PASSWORD,
+              cookieStore: newCookieStore,
+            },
+            {
+              language: "en-US",
+            }
+        );
+
+        const delayedNewLoginFunction = async (timeout) => {
+          setTimeout(async () => {
+            console.log("Logging in again");
+            await newClient
+                .login()
+                .then(() => instagramPostPictureFunction())
+                .catch((err) => {
+                  console.log(err);
+                  console.log("Login failed again!");
+                });
+          }, timeout);
+        };
+
+        await delayedNewLoginFunction(10000);
+      }
+    };
+
+    await instagramLoginFunction(url);
+  }
+}
