@@ -4,7 +4,6 @@ const FileCookieStore = require("tough-cookie-filestore2");
 const imaps = require("imap-simple");
 const _ = require("lodash");
 const simpleParser = require("mailparser").simpleParser;
-const Jimp = require("jimp");
 
 require("dotenv").config();
 

@@ -2,7 +2,6 @@ const { Client, GatewayIntentBits } = require("discord.js");
 const instagram = require("./instagram.js");
 const imgur = require("./imgur.js");
 const Jimp = require("jimp");
-const {resize} = require("jimp");
 require("dotenv").config();
 
 const client = new Client({
